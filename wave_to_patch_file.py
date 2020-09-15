@@ -13,12 +13,12 @@ import torch
 import torch.nn as nn
 import argparse
 import numpy as np
-
 from dx7pytorch import dxsynth as dxs
-
 
 parser = argparse.ArgumentParser(description='DXnet Inference Script.')
 parser.add_argument('--wav', type=str,default=False, metavar='PATH', help='Path to wave file.')
+parser.add_argument('--out', type=str,default=False, metavar='PATH', help='Path to output sysex file.')
+parser.add_argument('--model', type=str,default='./model/model.pt', metavar='PATH', help='Path to Pytorch DXnet model.')
 
 args = parser.parse_args()
 
@@ -180,24 +180,35 @@ def make_patch(model, device, audio):
         #Room for patch corrections here
         # 1. Algorithm correction?
         # 2. Transpose correction?
+        packed_patch = synth.pack_patch(fxu).reshape(128).astype('uint8')
+        packed_patch[118:128] = bytearray("DXnet     ", "utf8")
         
-        packed_patch = synth.pack_patch(fxu).reshape(1,128)
+        payload = packed_patch
+        for i in range(31):
+            payload = np.append(payload,np.zeros(len(packed_patch))).astype('uint8')
+        
+        checksum = np.bitwise_and(-np.sum(payload).astype('uint8'),0x7F)
+        sysex_data = np.append([0xF0,0x43,0x00,0x09,0x20,0x00],payload)
+        sysex_data = np.append(sysex_data,[checksum])
+        sysex_data = np.append(sysex_data,[0xF7])
     
-    return packed_patch
+    return sysex_data
 
 if __name__ == '__main__':
 
     wav_filename = args.wav
+    model_path = args.model
+    out_path = args.out
     wf = wave.open(wav_filename,'rb')
     audio = resample_and_mix(wf,t_start= 0.0,t_len = 2.0,
         target_fs = 8000,debug=False)
 
-    #model_path = './model/DXnet.pt'
-    model_path = './model/model.pt'
     OUTPUT_DIM = 145
     model = DXNET(OUTPUT_DIM, DXNET_block, nn.MaxPool1d)
     model.load_state_dict(torch.load(model_path,map_location=torch.device('cpu')))
     #model = torch.load(model_path,map_location=torch.device('cpu'))
 
     #Run Test assessment.
-    make_patch(model,'cpu',audio)
+    sysex_data = make_patch(model,'cpu',audio)
+    sysex_data.astype('uint8').tofile(out_path)
+    

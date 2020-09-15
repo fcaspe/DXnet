@@ -11,10 +11,17 @@ Original file is located at
 import wave
 import torch
 import torch.nn as nn
-
+import argparse
 import numpy as np
 
 from dx7pytorch import dxsynth as dxs
+
+
+parser = argparse.ArgumentParser(description='DXnet Inference Script.')
+parser.add_argument('--wav', type=str,default=False, metavar='PATH', help='Path to wave file.')
+
+args = parser.parse_args()
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -180,13 +187,17 @@ def make_patch(model, device, audio):
 
 if __name__ == '__main__':
 
-    wav_filename = './tests/test.wav'
+    wav_filename = args.wav
     wf = wave.open(wav_filename,'rb')
     audio = resample_and_mix(wf,t_start= 0.0,t_len = 2.0,
         target_fs = 8000,debug=False)
 
-    model_path = './model/dxnet.pt'
-    model = torch.load(model_path,map_location=torch.device('cpu'))
+    #model_path = './model/DXnet.pt'
+    model_path = './model/model.pt'
+    OUTPUT_DIM = 145
+    model = DXNET(OUTPUT_DIM, DXNET_block, nn.MaxPool1d)
+    model.load_state_dict(torch.load(model_path,map_location=torch.device('cpu')))
+    #model = torch.load(model_path,map_location=torch.device('cpu'))
 
     #Run Test assessment.
     make_patch(model,'cpu',audio)

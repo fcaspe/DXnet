@@ -33,8 +33,8 @@ args = parser.parse_args()
 
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
-save_path='./results/dxnet.pt'
-best_loss = float('inf')
+checkpoint_path='./results/checkpoint.pt'
+model_path = './results/model.pt'
 
 '''
 CNN Definition
@@ -162,10 +162,9 @@ def train(epoch):
     print('Epoch {} - Train Loss: {:.6f}'.format(
         epoch,epoch_loss))
 
-def validate(save_model=False):
+def validate(best_loss,epoch,save_model=False):
     model.eval()
     valid_loss = 0
-    global best_loss
     with torch.no_grad():
         for instance in valid_loader:
             data = instance['audio']
@@ -178,13 +177,19 @@ def validate(save_model=False):
             valid_loss += loss.item()
     valid_loss /= len(valid_loader)
     print('\tValid Loss: {:.4f}'.format(valid_loss))    
+    print('\t Best Loss: {:.4f}'.format(best_loss))  
     if valid_loss < best_loss:
+        best_loss = valid_loss
         # save model
         if save_model:
-            #torch.save(model.state_dict(), save_path, _use_new_zipfile_serialization=False)
-            torch.save(model, save_path,_use_new_zipfile_serialization=False)
-            print("[INFO] Model saved at: ", save_path, "\n")
-        best_loss = valid_loss
+            torch.save({
+                'last_epoch': epoch,
+                'optimizer_state_dict': optimizer.state_dict(),
+                'best_loss': valid_loss},
+                checkpoint_path,_use_new_zipfile_serialization=False)
+            torch.save(model.state_dict(),model_path,_use_new_zipfile_serialization=False)
+            print("[INFO] Model & Checkpoint saved at: {} & {}".format(checkpoint_path,model_path))
+    return best_loss
 
 def test():
     model.eval()
@@ -254,28 +259,31 @@ if __name__ == '__main__':
     if args.eval:
         print("Evaluating stored model . . .")
         #model.load_state_dict(torch.load(save_path))
-        model = torch.load(save_path)
+        model = torch.load(checkpoint_path)
         test()
     # train model
     else:
+        epoch_start = 1
+        optimizer = optim.Adam(model.parameters(), lr=args.lr) 
+        best_loss = float('inf')
+        
         if args.resume:
-            print("Resuming . . .")
-            #model.load_state_dict(torch.load(save_path))
-            model = torch.load(save_path)
-            validate(save_model = False)
+            model.load_state_dict(torch.load(model_path))
+            
+            checkpoint = torch.load(checkpoint_path)
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            epoch_start = checkpoint['last_epoch']
+            best_loss = checkpoint['best_loss']
+            
+            print("Resuming at epoch {} . . . ".format(epoch_start))
+            print("\tBest loss: {:.4f}".format(best_loss))
         else:
-            print("Training . . .")
-        optimizer = optim.Adam(model.parameters(), lr=args.lr)  
-        for epoch in range(1, args.epochs + 1):
+            print("Training . . .") 
+        for epoch in range(epoch_start, args.epochs + 1):
             train(epoch)
-            validate(save_model=True)
-            #Learning rate scaling.
-#            if epoch%40==0 and epoch != 0:
-#                new_lr = optimizer.param_groups[0]['lr']*0.1
-#                print("[INFO] Scaling lr to {}.".format(new_lr))
-#                optimizer.param_groups[0]['lr']=new_lr
+            best_loss = validate(best_loss,epoch,save_model=True)
 
         #Finished Training. Load the best model and test it.
         #model.load_state_dict(torch.load(save_path))
-        model = torch.load(save_path)
+        model.load_state_dict(torch.load(model_path))
         test()

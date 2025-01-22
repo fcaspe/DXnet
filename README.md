@@ -1,4 +1,9 @@
 # DXnet
+
+This project is archived. For more recent Sound Matching, visit for instance
+https://github.com/Sound2Synth/Sound2Synth
+
+
 ### A CNN to perform Yamaha DX7 patch regression from audio samples.
 
 DXnet generates [Yamaha DX7](http://www.vintagesynth.com/yamaha/dx7.php) patches from real audio samples. The model provided here 'desynthesizes' sounds captured in a **2 second window @ 8Khz**.
